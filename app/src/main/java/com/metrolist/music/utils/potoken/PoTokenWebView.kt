@@ -55,17 +55,11 @@ class PoTokenWebView private constructor(
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 val msg = m.message()
-                // Log all console messages for debugging
-                when (m.messageLevel()) {
-                    ConsoleMessage.MessageLevel.ERROR -> Timber.tag(TAG).e("JS: $msg")
-                    ConsoleMessage.MessageLevel.WARNING -> Timber.tag(TAG).w("JS: $msg")
-                    else -> Timber.tag(TAG).d("JS: $msg")
-                }
+                // Do not print arbitrary JS console strings: they can contain tokens/URLs.
 
                 if (msg.contains("Uncaught")) {
-                    val fmt = "\"$msg\", source: ${m.sourceId()} (${m.lineNumber()})"
-                    val exception = BadWebViewException(fmt)
-                    Timber.tag(TAG).e("This WebView implementation is broken: $fmt")
+                    val exception = BadWebViewException("WebView script failed")
+                    Timber.tag(TAG).e("WebView script failed")
 
                     onInitializationErrorCloseAndCancel(exception)
                     popAllPoTokenContinuations().forEach { (_, cont) -> cont.resumeWithException(exception) }
@@ -131,7 +125,7 @@ class PoTokenWebView private constructor(
     @JavascriptInterface
     fun onJsInitializationError(error: String) {
         if (BuildConfig.DEBUG) {
-            Timber.tag(TAG).e("Initialization error from JavaScript: $error")
+            Timber.tag(TAG).e("Initialization error from JavaScript")
         }
         onInitializationErrorCloseAndCancel(buildExceptionForJsError(error))
     }
@@ -147,7 +141,7 @@ class PoTokenWebView private constructor(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
             "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
         ) { responseBody ->
-            Timber.tag(TAG).d("GenerateIT response: $responseBody")
+            // IntegrityToken response is a secret; never log it.
             try {
                 val (integrityToken, expirationTimeInSeconds) = parseIntegrityTokenData(responseBody)
                 Timber.tag(TAG).d("Parsed integrity token; expires in $expirationTimeInSeconds sec")
@@ -177,7 +171,7 @@ class PoTokenWebView private constructor(
                     null
                 )
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Failed to parse integrity token data: ${e.message}")
+                Timber.tag(TAG).e("Could not parse integrity token data")
                 onInitializationErrorCloseAndCancel(PoTokenException("parseIntegrityTokenData failed: ${e.message}"))
             }
         }
@@ -228,7 +222,7 @@ class PoTokenWebView private constructor(
     @JavascriptInterface
     fun onObtainPoTokenError(identifier: String, error: String) {
         if (BuildConfig.DEBUG) {
-            Timber.tag(TAG).e("obtainPoToken error from JavaScript: $error")
+            Timber.tag(TAG).e("Could not generate integrity proof")
         }
         popPoTokenContinuation(identifier)?.resumeWithException(buildExceptionForJsError(error))
     }

@@ -212,10 +212,10 @@ object SpotifyAuth {
 
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
-                val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                connection.errorStream?.close() // Never persist or surface provider response bodies.
                 throw Spotify.SpotifyException(
                     responseCode,
-                    "HTTP $responseCode: $errorBody",
+                    "HTTP $responseCode (response body omitted)",
                 )
             }
 

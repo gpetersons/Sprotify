@@ -161,7 +161,7 @@ object SpotifyWebPlayer {
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     pageReady = url?.contains("open.spotify.com") == true
-                    Log.d(TAG, "onPageFinished ready=$pageReady url=$url")
+                    Log.d(TAG, "onPageFinished ready=$pageReady")
                     view?.evaluateJavascript(VISIBILITY_SPOOF_JS, null)
                     // Command-API bootstrap: capture the player's device id + tokens
                     // so we can transfer playback to THIS device and switch tracks
@@ -201,7 +201,7 @@ object SpotifyWebPlayer {
                     }
                 }
                 override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
-                    Log.d(TAG, "console: ${m.message()} @${m.sourceId()}:${m.lineNumber()}")
+                    // Arbitrary page console messages may contain session identifiers.
                     return true
                 }
             }
@@ -261,7 +261,7 @@ object SpotifyWebPlayer {
      */
     private fun playUri(uri: String, path: String) {
         val wv = webView ?: run { Log.w(TAG, "play() before attach"); return }
-        Log.d(TAG, "playUri($uri) activated=$activated commandReady=$commandReady")
+        Log.d(TAG, "playUri activated=$activated commandReady=$commandReady")
         wv.post {
             if (activated && commandReady) {
                 sendCommand(uri, path)
@@ -522,7 +522,7 @@ object SpotifyWebPlayer {
         // what caused the stutter. Ad-only hosts get a silent.mp3.
         val isRange = request.requestHeaders.keys.any { it.equals("Range", ignoreCase = true) }
         if (!isRange && audioAdPatterns.any { it in lower }) {
-            Log.d(TAG, "adblock: silenced audio ad $url")
+            Log.d(TAG, "adblock: audio request filtered")
             return runCatching {
                 android.webkit.WebResourceResponse(
                     "audio/mpeg", null, context.assets.open("silent.mp3"),

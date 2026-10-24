@@ -31,7 +31,7 @@ object SoulseekSource {
         val results = SoulseekClient.search(query, windowMs = 10_000)
         val candidates = ranked(results, title, artist, durationSec)
         if (candidates.isEmpty()) {
-            Log.d(TAG, "no matching FLAC for \"$query\" (${results.size} results, ${results.count { it.isFlac }} FLAC)")
+            Log.d(TAG, "no matching FLAC found")
             return null
         }
         // Peers often refuse (queue full, they don't upload to accounts sharing nothing),
@@ -43,10 +43,10 @@ object SoulseekSource {
             if (left < 10_000) break
             val fetched = SoulseekClient.download(c, part, timeoutMs = minOf(90_000, left))
             when {
-                !fetched -> Log.d(TAG, "fetch from ${c.username} failed: ${SoulseekClient.lastError ?: "timed out"}")
-                !isRightTrack(part, durationSec) -> Log.d(TAG, "${c.username}: not the expected FLAC, skipped")
+                !fetched -> Log.d(TAG, "peer FLAC fetch failed")
+                !isRightTrack(part, durationSec) -> Log.d(TAG, "peer FLAC mismatch")
                 part.renameTo(file) -> {
-                    Log.d(TAG, "FLAC from ${c.username}: ${c.displayName}")
+                    Log.d(TAG, "peer FLAC fetched")
                     trimCache(dir)
                     return file
                 }
@@ -109,7 +109,7 @@ object SoulseekSource {
     private fun isRightTrack(file: File, durationSec: Int): Boolean {
         val seconds = runCatching { file.inputStream().use { flacLengthSec(it.readNBytes(64 * 1024)) } }.getOrNull()
         val ok = seconds != null && (durationSec <= 0 || kotlin.math.abs(seconds - durationSec) <= 5)
-        if (!ok) Log.d(TAG, "${file.name}: length ${seconds ?: "unreadable"}s, expected ${durationSec}s")
+        if (!ok) Log.d(TAG, "peer FLAC duration mismatch")
         return ok
     }
 
