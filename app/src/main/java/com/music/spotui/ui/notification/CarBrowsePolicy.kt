@@ -82,7 +82,8 @@ object CarBrowsePolicy {
             "album/" + encode(item.name) + "/" + encode(item.artists),
             item.name, item.imageUrl, item.artists.ifBlank { item.subtitle })
         is HomeItem.Artist -> if (item.name.isBlank()) null else Entry(
-            "artist/" + encode(item.name), item.name, item.imageUrl, "Artist")
+            if (item.id.isNotBlank()) "artist-id/" + encode(item.id) else "artist/" + encode(item.name),
+            item.name, item.imageUrl, "Artist")
         is HomeItem.Radio -> Entry(
             radioId(item.seed.spotifyTrackId.ifBlank { item.seed.id.toString() }),
             item.name, item.imageUrl, "Sprotify Radio", true)

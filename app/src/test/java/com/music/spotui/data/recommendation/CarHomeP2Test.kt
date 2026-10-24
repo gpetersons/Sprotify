@@ -21,7 +21,7 @@ class CarHomeP2Test {
         ))
         val all = CarBrowsePolicy.recommendations(feed, mixesOnly = false)
         assertEquals(listOf("album/A%2FB/C%2FD", "playlist/abc%2F1",
-            "artist/R%C3%B6yksopp", "playlist/mix123"), all.map { it.id })
+            "artist-id/artist123", "playlist/mix123"), all.map { it.id })
         assertTrue(all.all { !it.playable })
         assertEquals(listOf("playlist/mix123"),
             CarBrowsePolicy.recommendations(feed, mixesOnly = true).map { it.id })

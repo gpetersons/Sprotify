@@ -672,28 +672,6 @@ fun SearchAlbumRow(album: com.music.spotui.data.entity.AlbumsModel, onClick: () 
     }
 }
 
-/** Spotify's "Browse all" categories: name + tile colour + the search query it runs. */
-private val browseCategories: List<Triple<String, Color, String>> = listOf(
-    Triple("Music", Color(0xFFDC148C), "Top hits"),
-    Triple("Podcasts", Color(0xFF1E3264), "Podcast"),
-    Triple("Made For You", Color(0xFF8768A8), "Discover weekly"),
-    Triple("New Releases", Color(0xFFE8115B), "New releases"),
-    Triple("Pop", Color(0xFF8D67AB), "Pop"),
-    Triple("Hip-Hop", Color(0xFF477D95), "Hip hop"),
-    Triple("Rock", Color(0xFFE61E32), "Rock"),
-    Triple("Latin", Color(0xFFE1118C), "Latin"),
-    Triple("Country", Color(0xFFD84000), "Country"),
-    Triple("R&B", Color(0xFFBA5D07), "R&B"),
-    Triple("K-Pop", Color(0xFF148A08), "K-pop"),
-    Triple("Indie", Color(0xFF608108), "Indie"),
-    Triple("Dance/Electronic", Color(0xFF056952), "Electronic dance"),
-    Triple("Metal", Color(0xFF777777), "Metal"),
-    Triple("Chill", Color(0xFF1E3264), "Chill"),
-    Triple("Charts", Color(0xFF8C1932), "Top charts"),
-    Triple("Workout", Color(0xFF777777), "Workout"),
-    Triple("Jazz", Color(0xFF503750), "Jazz"),
-)
-
 @Composable
 fun BrowseAllSection(onCategoryClick: (genre: String, title: String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -704,7 +682,7 @@ fun BrowseAllSection(onCategoryClick: (genre: String, title: String) -> Unit) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp),
         )
-        browseCategories.chunked(2).forEach { rowItems ->
+        com.music.spotui.data.entity.BrowseCatalog.categories.chunked(2).forEach { rowItems ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -712,7 +690,7 @@ fun BrowseAllSection(onCategoryClick: (genre: String, title: String) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 rowItems.forEach { (name, color, query) ->
-                    BrowseCategoryTile(name, color, query, Modifier.weight(1f)) { onCategoryClick(query, name) }
+                    BrowseCategoryTile(name, Color(color), query, Modifier.weight(1f)) { onCategoryClick(query, name) }
                 }
                 // Keep a half-width spacer if the last row has a single tile.
                 if (rowItems.size == 1) Spacer(Modifier.weight(1f))

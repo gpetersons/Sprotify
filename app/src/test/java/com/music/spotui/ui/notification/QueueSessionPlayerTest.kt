@@ -23,6 +23,12 @@ class QueueSessionPlayerTest {
             .setPlayWhenReady(true, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setPlaybackState(Player.STATE_READY).build()
         override fun getState() = value
+        fun progress(position: Long, duration: Long = 200_000, playing: Boolean = true) {
+            value = value.buildUpon().setContentPositionMs(position)
+                .setPlaylist(listOf(MediaItemData.Builder("stream").setDurationUs(duration * 1000).build()))
+                .setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST).build()
+            invalidateState()
+        }
         fun suppress() {
             value = value.buildUpon().setPlaybackSuppressionReason(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS).build()
             invalidateState()
@@ -97,4 +103,47 @@ class QueueSessionPlayerTest {
         assertNotNull(player.playerError)
         player.release()
     }
+    @Test fun progressPauseAndDurationJitterDoNotRepublishQueueButEditsDo() {
+        var state = QueueSessionPlayer.Snapshot(listOf(song(1), song(2)), 1, "Radio", true, true)
+        val engine = Engine()
+        val player = QueueSessionPlayer(Looper.getMainLooper(), { state }, {}, {}, {}, {})
+        player.bind(engine)
+        assertEquals(2, player.mediaItemCount)
+        shadowOf(Looper.getMainLooper()).idle()
+        var changes = 0
+        player.addListener(object : Player.Listener {
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) { changes++ }
+        })
+        repeat(10) {
+            engine.progress(13_000L + it * 1000, 200_001L + it, it % 2 == 0)
+            shadowOf(Looper.getMainLooper()).idle()
+            player.refresh()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertEquals(0, changes)
+        assertEquals(200_000L, player.duration)
+        state = state.copy(songs = listOf(song(2), song(1), song(3)))
+        player.refresh(); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, changes)
+        assertEquals(1, player.currentMediaItemIndex)
+        state = state.copy(songs = listOf(song(2), song(1).copy(title = "Corrected"), song(3)))
+        player.refresh(); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(2, changes)
+        assertEquals("Corrected", player.mediaMetadata.title)
+        player.release()
+    }
+    @Test fun resolvedDurationDoesNotRevertWhenSelectionChanges() {
+        var state = QueueSessionPlayer.Snapshot(listOf(song(1), song(2)), 1, "Radio", true, true)
+        val engine = Engine()
+        engine.progress(12000, 205000)
+        val player = QueueSessionPlayer(Looper.getMainLooper(), { state }, {}, {}, {}, {})
+        player.bind(engine)
+        val before = player.currentTimeline
+        state = state.copy(currentId = 2, engineMatches = false)
+        player.refresh()
+        assertEquals(before, player.currentTimeline)
+        assertEquals(1, player.currentMediaItemIndex)
+        player.release()
+    }
+
 }
