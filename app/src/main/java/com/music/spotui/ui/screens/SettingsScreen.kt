@@ -458,8 +458,7 @@ fun SettingsScreen(navController: NavController) {
             ) {
                 soulseekOn = it
                 com.music.spotui.data.preferences.setSoulseekEnabled(context, it)
-                // Off: leave the network now and close the listening port.
-                if (!it) Thread { com.music.spotui.soulseek.SoulseekClient.disconnect() }.start()
+                // setSoulseekEnabled immediately closes the server and listening socket when disabled.
             }
 
             Spacer(Modifier.height(12.dp))

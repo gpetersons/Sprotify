@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.music.spotui.data.preferences.resetSoulseekCredentials
 import com.music.spotui.data.preferences.soulseekCredentials
+import com.music.spotui.data.preferences.isSoulseekEnabled
 import com.music.spotui.lossless.LosslessSource
 import java.io.File
 
@@ -22,6 +23,7 @@ object SoulseekSource {
 
     /** Cached or freshly fetched FLAC for the track, or null. Blocking: IO only. */
     fun flac(context: Context, cacheKey: String, title: String, artist: String, durationSec: Int): File? {
+        if (!isSoulseekEnabled(context)) return null // Fail closed, even if called outside SongPlayer.
         val dir = File(context.cacheDir, "slsk").apply { mkdirs() }
         val file = File(dir, "$cacheKey.flac")
         if (file.length() > 0) return file.also { it.setLastModified(System.currentTimeMillis()) }

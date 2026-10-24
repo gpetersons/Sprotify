@@ -217,6 +217,7 @@ object SoulseekClient {
 
     fun disconnect() {
         loggedIn = false
+        activeDownload?.let { it.done = true; it.ok = false; it.events.offer("failed") }
         runCatching { socket?.close() }
         socket = null; out = null
         // Also stop listening, so "off" really leaves the network.

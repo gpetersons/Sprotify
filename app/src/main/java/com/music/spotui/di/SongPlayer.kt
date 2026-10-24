@@ -407,7 +407,7 @@ object SongPlayer {
             (trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)) != null
 
     private fun soulseekOn(ctx: Context): Boolean =
-        soulseekEnabled && com.music.spotui.data.preferences.isSoulseekEnabled(ctx)
+        com.music.spotui.soulseek.SoulseekPrivacyPolicy.enabled(soulseekEnabled, com.music.spotui.data.preferences.isSoulseekEnabled(ctx))
 
     private fun soulseekKey(song: String): String =
         trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song) ?: song.hashCode().toUInt().toString()

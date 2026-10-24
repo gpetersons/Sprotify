@@ -26,10 +26,11 @@ fun resetSoulseekCredentials(context: Context) {
     context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove("username").remove("password").apply()
 }
 
-/** User switch for the Soulseek fallback (Settings). On by default. */
+/** User switch for the Soulseek fallback (Settings). Off by default. */
 fun isSoulseekEnabled(context: Context): Boolean =
-    context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("enabled", true)
+    context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("enabled", false)
 
 fun setSoulseekEnabled(context: Context, enabled: Boolean) {
     context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply()
+    if (!enabled) com.music.spotui.soulseek.SoulseekClient.disconnect()
 }
