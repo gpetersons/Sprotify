@@ -296,6 +296,8 @@ class PlaybackService : MediaLibraryService() {
         SongPlayer.ensureCreated(this)
         // Let the player advance the in-app queue itself during a crossfade.
         SongPlayer.bindState(currentSongState)
+        // Restore metadata/queue before creating layouts, without starting audio or Activity.
+        restoreLastSessionIfNeeded()
         val base = SongPlayer.exoPlayer ?: return
 
         // Tapping the notification opens the app (back on the Now Playing screen).
@@ -342,19 +344,20 @@ class PlaybackService : MediaLibraryService() {
                 .distinctUntilChanged()
                 .collect { refreshCarControls() }
         }
-        // Refresh browse queue groups and Home's source subtitle on track changes too.
-        // The session projection also publishes the same full logical queue to native Queue.
+        // Browse children only change when queue content/current row changes, not on play/pause.
         playingQueueObserver = serviceScope.launch {
-            snapshotFlow { Triple(currentSongState.queue.value,
-                currentSongState.songId.value, Pair(playingSourceName(), currentSongState.playingState.value)) }
+            snapshotFlow { Pair(currentSongState.queue.value, currentSongState.songId.value) }
                 .distinctUntilChanged()
-                .collect { (queue, currentId, _) ->
+                .collect { (queue, currentId) ->
                     mediaSession?.notifyChildrenChanged(CarBrowsePolicy.PLAYING_QUEUE,
                         CarBrowsePolicy.queueFromCurrent(queue, currentId).size, null)
-                    mediaSession?.notifyChildrenChanged(CarBrowsePolicy.HOME, CarBrowsePolicy.home(playingSourceName()).size, null)
                     webPlayer?.refresh()
                     queuePlayer?.refresh()
                 }
+        }
+        serviceScope.launch {
+            snapshotFlow { Pair(playingSourceName(), currentSongState.playingState.value) }
+                .distinctUntilChanged().collect { queuePlayer?.refresh() }
         }
 
         // Keep the session player stable when crossfade promotes another audio engine.
@@ -781,7 +784,7 @@ class PlaybackService : MediaLibraryService() {
                         .add(addToQueueCommand)
                         .build()
                 )
-                .setCustomLayout(carControlButtons(carControlState()))
+                // Inherit the session layout so subsequent global updates reach this controller.
                 .build()
 
         override fun onCustomCommand(
@@ -1050,6 +1053,49 @@ class PlaybackService : MediaLibraryService() {
         } ?: HomeFeedModel()
     }
 
+    private suspend fun carHomeItems(): List<MediaItem> {
+        val feed = carHomeFeed()
+        val ready = withContext(Dispatchers.IO) {
+            com.music.spotui.data.recommendation.HomePresentationBuilder.build(applicationContext,
+                feed, repository.cachedHomeDiscoveries(), com.music.spotui.data.api.ProfileCache.name)
+        }
+        return CarHomePolicy.entries(ready).map { (entry, group) ->
+            carItem(entry).let { item ->
+                item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
+                    .setExtras(android.os.Bundle(item.mediaMetadata.extras ?: android.os.Bundle()).apply {
+                        putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, group)
+                        putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_SINGLE_ITEM,
+                            if (entry.artwork.isBlank()) MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
+                            else MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+                    }).build()).build()
+            }
+        }
+    }
+
+    private suspend fun carBrowseItems(): List<MediaItem> = withContext(Dispatchers.IO) {
+        // Bound artwork work. No periodic children notifications that reset host scrolling.
+        val gate = kotlinx.coroutines.sync.Semaphore(4)
+        com.music.spotui.data.entity.BrowseCatalog.carCategories.map { category ->
+            async {
+                val artwork = kotlinx.coroutines.withTimeoutOrNull(4_000L) {
+                    gate.acquire()
+                    try { com.music.spotui.data.api.BrowseTileImages.coverFor(applicationContext, category.query) }
+                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (error: Exception) { "" }
+                    finally { gate.release() }
+                }.orEmpty()
+                carItem(CarBrowsePolicy.Entry("category/${CarBrowsePolicy.encode(category.query)}",
+                    category.title, artwork)).let { item ->
+                    item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
+                        .setExtras(browseStyleExtras().apply {
+                            putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_SINGLE_ITEM,
+                                MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
+                        }).build()).build()
+                }
+            }
+        }.map { it.await() }
+    }
+
     private suspend fun continueCarTracks(): List<SongsModel> = withContext(Dispatchers.IO) {
         val active = currentSongState.queue.value.firstOrNull { it.id == currentSongState.songId.value }
         val recent = com.music.spotui.data.preferences.getListeningHistory(applicationContext)
@@ -1113,8 +1159,15 @@ class PlaybackService : MediaLibraryService() {
             }
             registerTracks(parentId, songs)
         }
-        parentId == CarBrowsePolicy.HOME -> CarBrowsePolicy.home(playingSourceName()).map(::carItem)
-        parentId == CarBrowsePolicy.BROWSE -> CarBrowsePolicy.browse().map(::carItem)
+        parentId == CarBrowsePolicy.HOME -> carHomeItems()
+        parentId == CarBrowsePolicy.BROWSE -> carBrowseItems()
+        parentId.startsWith("category/") -> {
+            val query = android.net.Uri.decode(parentId.removePrefix("category/"))
+            if (com.music.spotui.data.entity.BrowseCatalog.carCategories.none { it.query == query }) emptyList()
+            else lastSuccess(repository.provideCategoryPlaylists(query)).orEmpty().map {
+                folder("playlist/${CarBrowsePolicy.encode(it.spotifyId)}", it.name, it.coverUri)
+            }
+        }
         parentId == CarBrowsePolicy.PLAYING_QUEUE -> {
             val currentId = currentSongState.songId.value
             registerTracks(parentId, CarBrowsePolicy.queueFromCurrent(currentSongState.queue.value, currentId))

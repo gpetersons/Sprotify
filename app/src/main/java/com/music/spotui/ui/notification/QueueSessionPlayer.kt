@@ -28,6 +28,11 @@ class QueueSessionPlayer(
         val playIntent: Boolean, val engineMatches: Boolean,
     )
     private var engine: Player? = null
+    // Queue content must not change with position/buffering polls. Keep the first
+    // resolved duration for a track instead of moving engine duration between rows.
+    private val resolvedDurations = mutableMapOf<Pair<Int, String>, Long>()
+    private var playlistKey: List<Pair<SongsModel, Long>> = emptyList()
+    private var cachedPlaylist: List<MediaItemData> = emptyList()
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { refresh() }
     }
@@ -55,22 +60,32 @@ class QueueSessionPlayer(
             s.playIntent -> Player.STATE_BUFFERING
             else -> Player.STATE_IDLE
         }
-        val playlist = songs.mapIndexed { i, song ->
-            val metadata = MediaMetadata.Builder().setTitle(song.title).setDisplayTitle(song.title)
-                .setArtist(song.singer).setSubtitle(song.singer).setAlbumTitle(song.album)
-                .setIsPlayable(true).setIsBrowsable(false)
-                // A non-null URI also invalidates Media3 legacy's pending artwork callback
-                // when switching from remote artwork to a track with no cover.
-                .setArtworkUri(Uri.parse(song.coverUri.ifBlank {
-                    "android.resource://${com.music.spotui.BuildConfig.APPLICATION_ID}/drawable/placeholder"
-                })).build()
-            val duration = if (i == index && matched && p!!.duration > 0) p.duration
-                else song.durationMs.toLong().takeIf { it > 0 } ?: C.TIME_UNSET
-            MediaItemData.Builder(song.id)
-                .setMediaItem(MediaItem.Builder().setMediaId(CarBrowsePolicy.trackId(CarBrowsePolicy.PLAYING_QUEUE, song))
-                    .setMediaMetadata(metadata).build())
-                .setMediaMetadata(metadata).setIsSeekable(true)
-                .setDurationUs(if (duration == C.TIME_UNSET) C.TIME_UNSET else duration * 1000).build()
+        val liveKeys = songs.map { it.id to it.url }.toSet()
+        resolvedDurations.keys.retainAll(liveKeys)
+        songs.getOrNull(index)?.let { song ->
+            if (matched && p!!.duration > 0 && p.duration != C.TIME_UNSET) {
+                resolvedDurations.putIfAbsent(song.id to song.url, p.duration)
+            }
+        }
+        val key = songs.map { song -> song to (resolvedDurations[song.id to song.url]
+            ?: song.durationMs.toLong().takeIf { it > 0 } ?: C.TIME_UNSET) }
+        if (key != playlistKey) {
+            cachedPlaylist = key.map { (song, duration) ->
+                val metadata = MediaMetadata.Builder().setTitle(song.title).setDisplayTitle(song.title)
+                    .setArtist(song.singer).setSubtitle(song.singer).setAlbumTitle(song.album)
+                    .setIsPlayable(true).setIsBrowsable(false)
+                    // A non-null URI also invalidates Media3 legacy's pending artwork callback
+                    // when switching from remote artwork to a track with no cover.
+                    .setArtworkUri(Uri.parse(song.coverUri.ifBlank {
+                        "android.resource://${com.music.spotui.BuildConfig.APPLICATION_ID}/drawable/placeholder"
+                    })).build()
+                MediaItemData.Builder(song.id)
+                    .setMediaItem(MediaItem.Builder().setMediaId(CarBrowsePolicy.trackId(CarBrowsePolicy.PLAYING_QUEUE, song))
+                        .setMediaMetadata(metadata).build())
+                    .setMediaMetadata(metadata).setIsSeekable(true)
+                    .setDurationUs(if (duration == C.TIME_UNSET) C.TIME_UNSET else duration * 1000).build()
+            }
+            playlistKey = key
         }
         return State.Builder().setAvailableCommands(Player.Commands.Builder().addAll(
             Player.COMMAND_PLAY_PAUSE, Player.COMMAND_PREPARE, Player.COMMAND_STOP,
@@ -82,7 +97,7 @@ class QueueSessionPlayer(
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
             Player.COMMAND_GET_AUDIO_ATTRIBUTES, Player.COMMAND_GET_VOLUME
         ).build())
-            .setPlaylist(playlist).setCurrentMediaItemIndex(if (songs.isEmpty()) C.INDEX_UNSET else index)
+            .setPlaylist(cachedPlaylist).setCurrentMediaItemIndex(if (songs.isEmpty()) C.INDEX_UNSET else index)
             .setPlaylistMetadata(MediaMetadata.Builder().setTitle(s.source).build())
             .setPlaybackState(playback).setPlayerError(error)
             .setPlayWhenReady(if (matched) p!!.playWhenReady else s.playIntent,

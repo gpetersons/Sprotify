@@ -1,22 +1,18 @@
-# Sprotify 1.0.0 Beta 13
+# Sprotify 1.0.0 Beta 14
 
 ## Android Auto
 
-- Adds icons to Home and Browse categories and the library rows that previously showed missing-artwork placeholders.
-- Library now lists Playlists, Albums and Artists vertically. Liked Songs and Downloads remain available under Playlists. Followed artists open by their Spotify ID.
-- Publishes the shared logical song queue through a stable Media3 session player. The native queue can receive current and upcoming songs instead of only the engine's one or two resolved streams. Selecting a queue item uses the existing SongPlayer resolver; adding songs does not start playback. The host still controls headings and the queue button label.
-- Updates selected-track metadata immediately while its stream resolves, rather than exposing the previous stream's artwork and position. Session artwork loading uses two workers, HTTP timeouts and a 512-pixel output bound.
-- Handles dashboard suggested/recent root requests with playable listening-history items and retains a small restart-safe suggestion catalog. Cached song IDs can also be recovered from the active queue/history.
-- Remote voice search no longer holds the serial player-command future open. Pause, Stop or a newer selection cancel the pending search. Browse flow work moves off the session thread, has a timeout, and cancels when its request is cancelled.
+- Home displays collections directly, with artwork, titles and shelf labels from the phone Home presentation. It reuses the Spotify feed cache, local rotation, hidden-item preferences and saved discoveries. Large queue/continue/recommendation navigation tiles are removed. Native Queue remains on the player; Recents keeps history.
+- Browse uses the same genre/mood catalogue and playlist search as the phone Search screen. Categories open playlists, then tracks. Compact category rows use playlist cover art when available. Artwork work has bounded concurrency and timeouts. Podcasts and the misleading keyword-based Made For You category are excluded in the car. This is a playlist search catalogue, not Spotify's official curated Browse API.
+- Queue timeline entries are cached independently of progress updates. Resolved track durations remain stable across engine polls and selection changes. Play/pause no longer sends browse queue/Home children invalidations.
+- Restore saved queue/track metadata before creating the media session, without opening the phone Activity or starting audio. Controllers inherit the shared button layout so later updates use one layout source.
 
 ## Validation and limits
 
-Regression tests cover the production session adapter's timeline/events, indexed queue selection, immediate metadata changes, engine swaps, audio-focus suppression and errors, plus suggestion persistence and browse policy. CI also runs the existing Android, Spotify and desktop UI suites and release lint.
+Regression tests cover unchanged queue events during progress/pause/duration jitter, real queue edits, selection without reverting previous duration, and Home/Browse content policies, alongside existing tests. CI runs Android and Spotify tests, desktop tests, debug build and release lint.
 
-No DHU or BYD device test has been performed here. These changes address code paths implicated by the reports; the exact cause of the reported UI freeze has not been reproduced. Please verify Search responsiveness/Back, changing artwork, dashboard suggestions, manual Add to queue, native queue selection, radio continuation and crossfade on the phone and car. Native host presentation may differ from Spotify.
+No physical DHU/BYD test has been performed. The reported scroll reset and missing initial controls require verification on Android Auto, including a cold start with the phone locked. These are targeted fixes, not a claim that the device symptoms have already been reproduced or eliminated. Hosts control the final layout and button placement.
 
 ## Installation
 
-Version code 13, version name `1.0.0-beta.13`, package `lv.guntify.player`, existing signing identity. Install over Beta 12 without uninstalling. No Car App API 8 dependency is added.
-
-Signed APK, source archive, checksums and license/attribution files are included. See `LICENSE`, `NOTICE` and `SOURCE.md`.
+Version code 14, version name `1.0.0-beta.14`, package `lv.guntify.player`, existing signing identity. The signed release can update Beta 13 without uninstalling. No Car App API 8 is added.
