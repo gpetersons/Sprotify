@@ -5,6 +5,8 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import com.music.spotui.data.security.WebNavigationPolicy
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -96,8 +98,11 @@ fun YouTubeLoginScreen(navController: NavController, next: String = "") {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.databaseEnabled = true
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    webViewClient = WebViewClient()
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                            request?.isForMainFrame == true && !WebNavigationPolicy.youtube(request.url.toString())
+                    }
                     loadUrl(YOUTUBE_LOGIN_URL)
                 }
             },

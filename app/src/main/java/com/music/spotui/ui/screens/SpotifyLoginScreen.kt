@@ -7,6 +7,8 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import com.music.spotui.data.security.WebNavigationPolicy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -164,19 +166,21 @@ fun SpotifyLoginScreen(navController: NavController) {
                     settings.databaseEnabled = true
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     settings.javaScriptCanOpenWindowsAutomatically = true
                     // Keep the WebView's REAL (mobile Chrome) User-Agent for login —
                     // a spoofed desktop UA on a phone trips Spotify's reCAPTCHA bot
                     // check and it wrongly returns "Incorrect email or password".
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                            request?.isForMainFrame == true && !WebNavigationPolicy.spotify(request.url.toString())
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             pageReady.set(false)
                         }
                         override fun onPageFinished(view: WebView?, url: String?) {
                             pageReady.set(true)
-                            view?.let(::fixSpotifyLoginLayout)
+                            if (WebNavigationPolicy.spotify(url)) view?.let(::fixSpotifyLoginLayout)
                         }
                     }
                     loadUrl(SpotifyAuth.LOGIN_URL)

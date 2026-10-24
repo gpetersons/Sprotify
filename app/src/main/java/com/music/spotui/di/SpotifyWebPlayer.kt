@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import com.music.spotui.data.security.WebNavigationPolicy
 import android.widget.FrameLayout
 
 /**
@@ -92,7 +94,7 @@ object SpotifyWebPlayer {
         if (webView != null) return
         try {
             // Lets `chrome://inspect` attach to the hidden player for diagnosis.
-            WebView.setWebContentsDebuggingEnabled(true)
+            WebView.setWebContentsDebuggingEnabled(false) // Never expose release cookies and JS via chrome://inspect
             val wv = WebView(activity)
             wv.settings.apply {
                 javaScriptEnabled = true
@@ -147,11 +149,16 @@ object SpotifyWebPlayer {
                     request: android.webkit.WebResourceRequest?,
                 ): android.webkit.WebResourceResponse? {
                     if (request == null) return null
-                    com.metrolist.spotify.SpotifyWebSession.capture(request.url.toString(), request.requestHeaders)
+                    if (WebNavigationPolicy.spotifyPlayer(request.url.toString()))
+                        com.metrolist.spotify.SpotifyWebSession.capture(request.url.toString(), request.requestHeaders)
                     return interceptForAds(appContext, request) ?: super.shouldInterceptRequest(view, request)
                 }
 
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+                    request?.isForMainFrame == true && !WebNavigationPolicy.spotifyPlayer(request.url.toString())
+
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    if (!WebNavigationPolicy.spotifyPlayer(url)) return
                     // Inject as EARLY as possible: the off-screen WebView reports the
                     // page as hidden, and Spotify's Web Playback SDK refuses to
                     // register a device / start audio on a hidden page. Spoof the Page
@@ -160,7 +167,8 @@ object SpotifyWebPlayer {
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    pageReady = url?.contains("open.spotify.com") == true
+                    pageReady = WebNavigationPolicy.spotifyPlayer(url)
+                    if (!pageReady) return
                     Log.d(TAG, "onPageFinished ready=$pageReady url=$url")
                     view?.evaluateJavascript(VISIBILITY_SPOOF_JS, null)
                     // Command-API bootstrap: capture the player's device id + tokens
