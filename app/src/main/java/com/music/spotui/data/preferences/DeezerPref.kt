@@ -1,6 +1,7 @@
 package com.music.spotui.data.preferences
 
 import android.content.Context
+import com.music.spotui.data.security.SecureSecrets
 
 /**
  * Local storage for the Deezer account: the ARL cookie captured at login, the
@@ -15,14 +16,15 @@ private fun prefs(context: Context) =
     context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
 fun setDeezerArl(context: Context, arl: String) {
-    prefs(context).edit().putString(KEY_ARL, arl).apply()
+    SecureSecrets.write(context, PREF, KEY_ARL, arl)
 }
 
 fun getDeezerArl(context: Context): String? =
-    prefs(context).getString(KEY_ARL, null)?.takeIf { it.isNotBlank() }
+    SecureSecrets.read(context, PREF, KEY_ARL)?.takeIf { it.isNotBlank() }
 
 fun clearDeezer(context: Context) {
-    prefs(context).edit().remove(KEY_ARL).remove(KEY_TIER).apply()
+    SecureSecrets.write(context, PREF, KEY_ARL, null)
+    prefs(context).edit().remove(KEY_TIER).apply()
 }
 
 /** Deezer is used when the user has logged in and hasn't turned it off. */

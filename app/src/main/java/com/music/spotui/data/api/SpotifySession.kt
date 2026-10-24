@@ -1,6 +1,7 @@
 package com.music.spotui.data.api
 
 import android.content.Context
+import com.music.spotui.data.security.SecureSecrets
 
 /**
  * Stores the logged-in Spotify `sp_dc` cookie used to mint web access tokens.
@@ -17,15 +18,11 @@ object SpotifySession {
     private const val DEFAULT_SP_DC = ""
 
     fun spDc(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_SP_DC, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_SP_DC
+        return SecureSecrets.read(context, PREFS, KEY_SP_DC)?.takeIf { it.isNotBlank() } ?: DEFAULT_SP_DC
     }
 
     fun setSpDc(context: Context, value: String) {
         if (spDc(context) != value.trim()) { com.music.spotui.data.preferences.CreatedPlaylists.newSession(context); context.getSharedPreferences("LibraryCache",0).edit().clear().apply(); com.metrolist.spotify.SpotifyWebSession.clear(); ProfileCache.clear(); Api.HomeCache.clear(); com.music.spotui.data.preferences.HomeSnapshotCache.clear(context) }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_SP_DC, value.trim())
-            .apply()
+        SecureSecrets.write(context, PREFS, KEY_SP_DC, value.trim())
     }
 }

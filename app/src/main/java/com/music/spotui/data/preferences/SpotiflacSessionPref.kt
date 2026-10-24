@@ -1,6 +1,7 @@
 package com.music.spotui.data.preferences
 
 import android.content.Context
+import com.music.spotui.data.security.SecureSecrets
 
 /**
  * Stores the signed-session obtained from SpotiFLAC's gated backend (experimental
@@ -17,9 +18,9 @@ fun saveSpotiflacSession(
     installId: String,
     expiresAt: String,
 ) {
+    SecureSecrets.write(context, PREF, "session_id", sessionId)
+    SecureSecrets.write(context, PREF, "session_secret", sessionSecret)
     context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-        .putString("session_id", sessionId)
-        .putString("session_secret", sessionSecret)
         .putString("install_id", installId)
         .putString("expires_at", expiresAt)
         .apply()
@@ -34,8 +35,8 @@ data class SpotiflacSession(
 
 fun getSpotiflacSession(context: Context): SpotiflacSession? {
     val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-    val id = p.getString("session_id", null)?.takeIf { it.isNotBlank() } ?: return null
-    val secret = p.getString("session_secret", null)?.takeIf { it.isNotBlank() } ?: return null
+    val id = SecureSecrets.read(context, PREF, "session_id")?.takeIf { it.isNotBlank() } ?: return null
+    val secret = SecureSecrets.read(context, PREF, "session_secret")?.takeIf { it.isNotBlank() } ?: return null
     return SpotiflacSession(
         sessionId = id,
         sessionSecret = secret,
@@ -47,5 +48,7 @@ fun getSpotiflacSession(context: Context): SpotiflacSession? {
 fun hasSpotiflacSession(context: Context): Boolean = getSpotiflacSession(context) != null
 
 fun clearSpotiflacSession(context: Context) {
+    SecureSecrets.write(context, PREF, "session_id", null)
+    SecureSecrets.write(context, PREF, "session_secret", null)
     context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
 }
