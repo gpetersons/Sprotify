@@ -71,8 +71,8 @@ jobs:
               raise SystemExit('Release APK failed signature verification.')
           info = subprocess.check_output([str(tools/'aapt'), 'dump', 'badging', str(apk)], text=True).splitlines()[0]
           if ("name='lv.guntify.player'" not in info or
-                  "versionCode='14'" not in info or
-                  "versionName='1.0.0-beta.14'" not in info):
+                  "versionCode='15'" not in info or
+                  "versionName='1.0.0-beta.15'" not in info):
               raise SystemExit('Unexpected Sprotify APK identity or version.')
           print('Signed Sprotify package verified.')
           PY
@@ -83,14 +83,14 @@ jobs:
           git archive --format=zip --prefix=Sprotify/ -o release/Sprotify-source.zip HEAD
           cp LICENSE NOTICE SOURCE.md release/
           (cd release && sha256sum Sprotify.apk Sprotify-source.zip > SHA256SUMS.txt)
-      - name: Publish Sprotify Beta 14
+      - name: Publish Sprotify Beta 15
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag=v1.0.0-beta.14
+          tag=v1.0.0-beta.15
           # Never overwrite a previously signed release.
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Version already published; this is not a new release."
             exit 1
           fi
-          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "Sprotify 1.0.0 Beta 14" --notes-file RELEASE_NOTES.md --prerelease
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "Sprotify 1.0.0 Beta 15" --notes-file RELEASE_NOTES.md --prerelease

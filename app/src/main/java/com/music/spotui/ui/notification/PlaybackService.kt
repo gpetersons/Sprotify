@@ -323,6 +323,9 @@ class PlaybackService : MediaLibraryService() {
         projection.bind(base)
         mediaSession = MediaLibrarySession.Builder(this, wrap(projection), LibraryCallback())
             .setSessionActivity(sessionActivity)
+            // AA can reset queue scroll on periodic legacy playback-state updates.
+            // Keep event-driven updates; workaround for androidx/media#2192.
+            .setPeriodicPositionUpdateEnabled(false)
             .setBitmapLoader(androidx.media3.session.CacheBitmapLoader(
                 androidx.media3.datasource.DataSourceBitmapLoader(artworkExecutor,
                     androidx.media3.datasource.DefaultDataSource.Factory(this,
