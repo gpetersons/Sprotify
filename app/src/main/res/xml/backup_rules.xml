@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Login cookies and sessions (API <= 30 / adb backup). Mirrors data_extraction_rules.xml. -->
+<!-- Cloud/device backups are disabled; users may still explicitly export from Settings. -->
 <full-backup-content>
-    <exclude domain="sharedpref" path="spotify_session.xml"/>
-    <exclude domain="sharedpref" path="Deezer.xml"/>
-    <exclude domain="sharedpref" path="SpotiflacSession.xml"/>
+    <exclude domain="root" path="."/>
 </full-backup-content>
