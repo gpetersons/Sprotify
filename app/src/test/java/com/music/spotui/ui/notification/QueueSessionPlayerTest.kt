@@ -33,6 +33,10 @@ class QueueSessionPlayerTest {
             value = value.buildUpon().setPlaybackSuppressionReason(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS).build()
             invalidateState()
         }
+        fun end() {
+            value = value.buildUpon().setPlaybackState(Player.STATE_ENDED).build()
+            invalidateState()
+        }
         fun fail() {
             value = value.buildUpon().setPlaybackState(Player.STATE_IDLE)
                 .setPlayerError(PlaybackException("failure", null, PlaybackException.ERROR_CODE_IO_UNSPECIFIED)).build()
@@ -146,4 +150,32 @@ class QueueSessionPlayerTest {
         player.release()
     }
 
+    @Test fun radioContinuationAndSameTrackRetryKeepNowPlayingInBuffering() {
+        var state = QueueSessionPlayer.Snapshot(listOf(song(1), song(2)), 1, "Radio", true, true)
+        val engine = Engine()
+        val player = QueueSessionPlayer(Looper.getMainLooper(), { state }, {}, {}, {}, {})
+        player.bind(engine)
+        // The logical request is pending before the retained engine publishes its end/pause.
+        state = state.copy(awaitingStream = true)
+        engine.end()
+        engine.progress(200_000, playing = false)
+        player.refresh()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(Player.STATE_BUFFERING, player.playbackState)
+        assertTrue(player.playWhenReady)
+        assertEquals("Song 1", player.mediaMetadata.title)
+        assertEquals(2, player.mediaItemCount)
+        assertEquals(0L, player.currentPosition)
+        // A radio fill keeps the timeline available, then selects the next song.
+        state = state.copy(songs = state.songs + song(3), currentId = 2, engineMatches = false)
+        player.refresh()
+        assertEquals(Player.STATE_BUFFERING, player.playbackState)
+        assertEquals("Song 2", player.mediaMetadata.title)
+        assertEquals(3, player.mediaItemCount)
+        // Explicit pause must still remove play intent while a lookup is pending.
+        state = state.copy(playIntent = false)
+        player.refresh()
+        assertFalse(player.playWhenReady)
+        player.release()
+    }
 }

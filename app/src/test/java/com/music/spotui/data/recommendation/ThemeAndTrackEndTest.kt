@@ -40,4 +40,28 @@ class ThemeAndTrackEndTest {
         gate.reset()
         assertTrue(gate.take(true, true, false))
     }
+    @Test fun retainedEndedStreamCannotConsumeNewSongsDuringSlowLookup() {
+        val gate = TrackEndGate()
+        assertTrue(gate.take(true, true, false)) // A ends, select B.
+        gate.beginRequest()
+        repeat(40) { // Ten seconds of the existing 250 ms position watchdog.
+            gate.reset() // Even a delayed READY event cannot attach the old stream.
+            assertFalse(gate.take(true, true, false))
+            assertFalse(gate.ownsMedia("A", "B"))
+        }
+        gate.streamInstalled()
+        assertTrue(gate.ownsMedia("B", "B"))
+        assertFalse(gate.ownsMedia("A", "B"))
+        assertTrue(gate.take(true, true, false))
+        assertFalse(gate.take(true, true, false))
+    }
+    @Test fun retryOfSameQueryMustInstallItsOwnStreamBeforeItCanEnd() {
+        val gate = TrackEndGate()
+        gate.beginRequest()
+        assertFalse(gate.ownsMedia("A", "A"))
+        assertFalse(gate.take(true, true, false))
+        gate.streamInstalled()
+        assertTrue(gate.ownsMedia("A", "A"))
+        assertTrue(gate.take(true, true, false))
+    }
 }

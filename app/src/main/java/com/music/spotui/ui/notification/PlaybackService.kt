@@ -92,6 +92,12 @@ class PlaybackService : MediaLibraryService() {
         serviceScope.launch { refreshCarControls() }
     }
 
+    private var radioEndWait: Triple<Long, Int, Long>? = null
+    private fun waitingForRadio(): Boolean = radioEndWait?.let {
+        SongPlayer.recoveryAllowed && it.first == currentSongState.generation &&
+            it.second == currentSongState.songId.value && it.third == SongPlayer.playbackRequestId
+    } == true
+
     private fun selectedCarTrack(): SongsModel? =
         CarRadioActionPolicy.currentTrack(currentSongState.queue.value, currentSongState.songId.value)
 
@@ -313,10 +319,13 @@ class PlaybackService : MediaLibraryService() {
 
         val projection = QueueSessionPlayer(mainLooper, snapshot = {
             val current = selectedCarTrack()
+            val radioWaiting = waitingForRadio()
             QueueSessionPlayer.Snapshot(currentSongState.queue.value, currentSongState.songId.value,
-                playingSourceName(), currentSongState.playingState.value || SongPlayer.isResolvingAudio(),
+                playingSourceName(), radioWaiting || currentSongState.playingState.value ||
+                    (SongPlayer.recoveryAllowed && (SongPlayer.isAwaitingStream || SongPlayer.isResolvingAudio())),
                 if (showingWeb) webPlayer?.currentMediaItem?.mediaId == current?.id?.toString()
-                else SongPlayer.exoPlayer?.currentMediaItem?.mediaId == current?.url)
+                else SongPlayer.exoPlayer?.currentMediaItem?.mediaId == current?.url,
+                awaitingStream = radioWaiting || (!showingWeb && SongPlayer.isAwaitingStream))
         }, onSelect = ::selectQueueSong, onSeek = SongPlayer::seekTo,
             onPlay = { if (it) SongPlayer.play() else SongPlayer.pause() }, onStop = SongPlayer::stop)
         queuePlayer = projection
@@ -372,6 +381,7 @@ class PlaybackService : MediaLibraryService() {
         SongPlayer.onPlaybackRecovered = { streamRecovery.recovered() }
         SongPlayer.onRetryRequested = { streamRecovery.recovered() }
         SongPlayer.onPlaybackRequestChanged = {
+            radioEndWait = null
             streamRecovery.requestChanged()
             serviceScope.launch { queuePlayer?.refresh() }
         }
@@ -594,19 +604,28 @@ class PlaybackService : MediaLibraryService() {
         val tasteRevision=com.music.spotui.data.preferences.RadioTaste.revision.value
         val generation = currentSongState.generation
         val endedId = currentSongState.songId.value
+        val wait = Triple(generation, endedId, SongPlayer.playbackRequestId)
+        radioEndWait = wait
+        queuePlayer?.refresh()
         serviceScope.launch {
-            val fresh = continuationFor(generation, endedId, queue).await()
-                .filter { next -> currentSongState.queue.value.none { it.id == next.id } }
-            if (tasteRevision!=com.music.spotui.data.preferences.RadioTaste.revision.value || generation != currentSongState.generation || endedId != currentSongState.songId.value) return@launch
-            val liveQueue = currentSongState.queue.value
-            val liveIndex = liveQueue.indexOfFirst { it.id == endedId }
-            if (liveIndex in 0 until liveQueue.size - 1) { advance(forward = true); return@launch }
-            if (fresh.isEmpty()) {
-                currentSongState.updatePlayingState(false)
-                return@launch
+            try {
+                val fresh = continuationFor(generation, endedId, queue).await()
+                    .filter { next -> currentSongState.queue.value.none { it.id == next.id } }
+                if (radioEndWait !== wait || !waitingForRadio() ||
+                    tasteRevision != com.music.spotui.data.preferences.RadioTaste.revision.value) return@launch
+                val liveQueue = currentSongState.queue.value
+                val liveIndex = liveQueue.indexOfFirst { it.id == endedId }
+                if (liveIndex in 0 until liveQueue.size - 1) { advance(forward = true); return@launch }
+                if (fresh.isEmpty()) {
+                    currentSongState.updatePlayingState(false)
+                    return@launch
+                }
+                currentSongState.updateQueue(currentSongState.queue.value + if (currentSongState.activeRadioSeed != null) fresh.take(10) else fresh, preserveSession = true)
+                advance(forward = true)
+            } finally {
+                if (radioEndWait === wait) radioEndWait = null
+                queuePlayer?.refresh()
             }
-            currentSongState.updateQueue(currentSongState.queue.value + if (currentSongState.activeRadioSeed != null) fresh.take(10) else fresh, preserveSession = true)
-            advance(forward = true)
         }
     }
 

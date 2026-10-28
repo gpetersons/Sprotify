@@ -268,6 +268,7 @@ object SongPlayer {
         val appContext = context.applicationContext
         appCtx = appContext
         if (tryPlayPrepared(song)) return
+        trackEndGate.beginRequest()
         currentRequest = song
         com.music.spotui.audio.PlaybackPresentation.set(com.music.spotui.audio.PlaybackPresentation.Stage.CONNECTING)
         com.music.spotui.data.preferences.PlaybackDiagnostics.record(appContext,"Lookup started")
@@ -368,6 +369,7 @@ object SongPlayer {
             com.music.spotui.data.preferences.PlaybackDiagnostics.record(appContext,"Stream prepared",currentSource.replace("•"," "))
             player!!.setMediaItem(buildMediaItem(streamUrl, mimeType))
             player!!.prepare()
+            trackEndGate.streamInstalled()
             // Restored session: continue from where the last run stopped.
             if (song == restoreQuery && restorePositionMs > 0) {
                 val knownDuration = boundState?.queue?.value?.firstOrNull { it.url == song }?.durationMs?.toLong() ?: 0L
@@ -1528,7 +1530,7 @@ object SongPlayer {
             preloadedNext = null
             currentRequest = query
             playbackVisit++
-            trackEndGate.reset()
+            trackEndGate.streamInstalled()
             val p = player ?: return
             if (p.currentMediaItemIndex > 0) p.removeMediaItems(0, p.currentMediaItemIndex)
             appCtx?.let { ctx ->
@@ -1569,6 +1571,9 @@ object SongPlayer {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // The previous item is deliberately retained while the next request loads.
+            // Its late error must not start recovery for the new selection.
+            if (trackEndGate.awaitingStream) return
             // A queued-ahead track can fail after the player moved onto it.
             val song = player?.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
                 ?: currentRequest.takeIf { it.isNotBlank() } ?: return
@@ -1603,6 +1608,7 @@ object SongPlayer {
         return player?.isPlaying ?: false
     }
     fun activeSongId(): Int? = boundState?.songId?.value
+    val isAwaitingStream: Boolean get() = trackEndGate.awaitingStream
     fun isResolvingAudio(): Boolean = playbackResolveJob?.isActive == true || bufferingWatch?.isActive == true
 
     fun webPlaybackActive(): Boolean {
@@ -1637,7 +1643,7 @@ object SongPlayer {
         // stream while the selected track's resolver is still running.
         if (playbackResolveJob?.isActive == true) return
         val selectedQuery = boundState?.queue?.value?.firstOrNull { it.id == boundState?.songId?.value }?.url
-        if (selectedQuery != null && player?.currentMediaItem?.mediaId != selectedQuery) {
+        if (selectedQuery != null && (isAwaitingStream || player?.currentMediaItem?.mediaId != selectedQuery)) {
             appCtx?.let { playSong(selectedQuery, it) }
             return
         }
@@ -1691,7 +1697,10 @@ object SongPlayer {
     }
 
     /** Queue-only changes discard the resolved next item without touching current audio. */
-    fun hasEnded(): Boolean = player?.playbackState == Player.STATE_ENDED && (player?.mediaItemCount ?: 0) > 0
+    fun hasEnded(): Boolean = player?.let {
+        it.playbackState == Player.STATE_ENDED &&
+            trackEndGate.ownsMedia(it.currentMediaItem?.mediaId, currentRequest)
+    } == true
 
     fun invalidateUpcomingPreparation() {
         preparationJob?.cancel(); preparationJob = null; preparationKey = null; warmedNext = null
@@ -2014,7 +2023,8 @@ object SongPlayer {
     private fun notifyTrackEndOnce() {
         val p = player ?: return
         val callback = onTrackEnded ?: return
-        if (!trackEndGate.take(p.playbackState == Player.STATE_ENDED, p.mediaItemCount > 0, isCrossfading)) return
+        if (!trackEndGate.take(hasEnded(), p.mediaItemCount > 0, isCrossfading)) return
+        appCtx?.let { com.music.spotui.data.preferences.PlaybackDiagnostics.record(it, "Track completed", "visit=$playbackVisit") }
         callback()
     }
 
@@ -2139,7 +2149,7 @@ object SongPlayer {
             pendingNextSong?.let { next ->
                 currentRequest = next.url
                 playbackVisit++
-                trackEndGate.reset()
+                trackEndGate.streamInstalled()
                 boundState?.updateSongState(
                     next.coverUri, next.title, next.singer, true,
                     next.id, pendingNextSongIdx, next.album,
