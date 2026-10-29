@@ -26,6 +26,7 @@ class QueueSessionPlayer(
     data class Snapshot(
         val songs: List<SongsModel>, val currentId: Int, val source: String,
         val playIntent: Boolean, val engineMatches: Boolean,
+        val awaitingStream: Boolean = false,
     )
     private var engine: Player? = null
     // Queue content must not change with position/buffering polls. Keep the first
@@ -52,7 +53,7 @@ class QueueSessionPlayer(
         val songs = s.songs.distinctBy { it.id }
         val index = songs.indexOfFirst { it.id == s.currentId }.coerceAtLeast(0)
         val p = engine
-        val matched = s.engineMatches && p != null
+        val matched = s.engineMatches && p != null && !s.awaitingStream
         val error = if (matched) p?.playerError else null
         val playback = when {
             songs.isEmpty() || error != null -> Player.STATE_IDLE

@@ -1,17 +1,18 @@
-# Sprotify 1.0.0 Beta 15
+# Sprotify 1.0.0 Beta 16
 
-## Android Auto queue scrolling
+## Playback and Android Auto fixes
 
-Disable Media3 periodic session position broadcasts to work around Android Auto resetting the queue scroll position during playback (androidx/media#2192). Event-driven playback updates remain enabled.
+- Prevent repeated completion of a retained, ended audio stream from rapidly skipping songs while the next track is still loading.
+- Require the newly requested stream to be installed before it can report completion, including retries of the same song. Ignore errors from the retained old stream during lookup.
+- Keep the Android Auto session in a loading state while resolving the next track or awaiting radio continuation, addressing unintended exits from Now Playing.
+- Discard end-of-track radio continuation results after the playback request changes or the user pauses.
 
-This release changes only this session setting, the version and release metadata. Home, Browse, Search selection, queue insertion and the audio engine are unchanged from Beta 14. Search selection starting playback is not fixed in this release.
+## Validation and device testing
 
-## Validation
+The playback fix passed GitHub Android and Spotify unit tests, debug compilation, release lint and desktop UI tests. The signed release workflow runs tests again. Physical Samsung/BYD Android Auto behavior has not been verified here.
 
-CI runs the existing Android, Spotify and desktop tests, debug build and release lint. Device behavior has not been verified here. Please check queue scrolling during playback, progress display, pause/resume, seeking and track changes on Android Auto.
-
-Reference: https://github.com/androidx/media/issues/2192
+Please test automatic track changes with the phone locked, Radio continuation without leaving Now Playing, Previous on earlier skipped songs, manual Next/Previous, pause/resume, repeat and crossfade. The relationship between phone locking and the reported skipping is not established.
 
 ## Installation
 
-Version code 15, version name `1.0.0-beta.15`, package `lv.guntify.player`, existing signing identity. The signed release can update Beta 14 without uninstalling.
+Version code 16, version name `1.0.0-beta.16`, package `lv.guntify.player`, existing signing identity. Install over the existing beta without uninstalling to retain app data.
